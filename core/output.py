@@ -3,44 +3,51 @@ from pathlib import Path
 
 
 def write_output(
-    gog_games: list[str],
-    steam_games: list[str],
+    libraries: dict[str, list[str]],
     output_dir: Path,
     format: str = "txt",
-) -> tuple[Path | None, Path | None]:
+) -> dict[str, Path]:
     """
-    Writes game lists to the output directory.
+    Writes game libraries to the output directory.
 
-    Only writes a file if the list is non-empty — if the user skipped
-    a platform, no empty file is created for it.
+    Takes a dict of platform -> game list. Only writes files for
+    non-empty lists — skipped platforms produce no output files.
 
-    txt format: two separate files, one game per line.
-         gog_games.txt and steam_games.txt
+    Adding a new platform in future requires zero changes here —
+    just pass a new key in the libraries dict.
 
-    json format: one merged file with platform as keys.
-         games.json — { "gog": [...], "steam": [...] }
-         Only includes platforms that have games.
+    txt format: one file per platform
+        gog_games.txt, steam_games.txt, epic_games.txt, etc.
+
+    json format: one merged file with platform as keys
+        games.json — { "gog": [...], "steam": [...], "epic": [...] }
+        Only includes platforms that have games.
+
+    Returns a dict of platform -> Path for each file written.
+    Empty platforms are not included in the return value.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
+    written = {}
 
     if format == "json":
-        data = {}
-        if gog_games:
-            data["gog"] = gog_games
-        if steam_games:
-            data["steam"] = steam_games
+        data = {
+            platform: games
+            for platform, games in libraries.items()
+            if games
+        }
         if not data:
-            return None, None
+            return {}
         json_path = output_dir / "games.json"
-        json_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
-        return json_path, None
+        json_path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False),
+            encoding="utf-8"
+        )
+        written["json"] = json_path
     else:
-        gog_path = None
-        steam_path = None
-        if gog_games:
-            gog_path = output_dir / "gog_games.txt"
-            gog_path.write_text("\n".join(gog_games))
-        if steam_games:
-            steam_path = output_dir / "steam_games.txt"
-            steam_path.write_text("\n".join(steam_games))
-        return gog_path, steam_path
+        for platform, games in libraries.items():
+            if games:
+                path = output_dir / f"{platform}_games.txt"
+                path.write_text("\n".join(games), encoding="utf-8")
+                written[platform] = path
+
+    return written

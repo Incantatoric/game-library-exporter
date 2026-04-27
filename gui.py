@@ -7,6 +7,7 @@ import customtkinter as ctk
 from tkinter import filedialog
 
 from core.gog import export_gog
+from core.epic import export_epic, get_legendary_config_path
 from core.steam import parse_steam_paste
 from core.output import write_output
 from core import config
@@ -28,7 +29,7 @@ class App(ctk.CTk):
 
         self.geometry(f"{self.cfg['window_width']}x{self.cfg['window_height']}")
         self.resizable(True, True)
-        self.minsize(700, 700)
+        self.minsize(700, 900)
 
         # Save config when window is closed
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -78,9 +79,47 @@ class App(ctk.CTk):
         )
         self.gog_hint.grid(row=2, column=0, columnspan=3, padx=15, pady=(0, 12), sticky="w")
 
+        # ── EPIC SECTION ──────────────────────────────────────────────
+        epic_frame = ctk.CTkFrame(self)
+        epic_frame.grid(row=1, column=0, sticky="ew", **padding)
+        epic_frame.grid_columnconfigure(1, weight=1)
+
+        epic_header = ctk.CTkFrame(epic_frame, fg_color="transparent")
+        epic_header.grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(12, 4))
+
+        self.epic_enabled_var = ctk.BooleanVar(value=self.cfg["epic_enabled"])
+        ctk.CTkCheckBox(
+            epic_header, text="Export Epic (via Heroic)",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            checkmark_color="white",
+            fg_color=CHECKBOX_ACTIVE_COLOR,
+            hover_color=CHECKBOX_HOVER_COLOR,
+            variable=self.epic_enabled_var,
+            command=self._toggle_epic_section,
+        ).pack(side="left")
+
+        ctk.CTkLabel(epic_frame, text="Legendary path:", anchor="w").grid(
+            row=1, column=0, padx=15, pady=6, sticky="w"
+        )
+        self.epic_path_var = ctk.StringVar(value=self.cfg["epic_legendary_path"])
+        self.epic_path_entry = ctk.CTkEntry(epic_frame, textvariable=self.epic_path_var, state="readonly")
+        self.epic_path_entry.grid(row=1, column=1, padx=6, pady=6, sticky="ew")
+
+        self.epic_browse_btn = ctk.CTkButton(epic_frame, text="Browse", width=80, command=self._browse_epic_path)
+        self.epic_browse_btn.grid(row=1, column=2, padx=(0, 15), pady=6)
+
+        ctk.CTkLabel(
+            epic_frame,
+            text="Open Heroic Launcher before exporting — it refreshes your Epic token on launch.\nTokens expire after 36 hours.",
+            text_color="gray",
+            font=ctk.CTkFont(size=11),
+            justify="left",
+            anchor="w",
+        ).grid(row=2, column=0, columnspan=3, padx=15, pady=(0, 12), sticky="w")
+
         # ── STEAM SECTION ─────────────────────────────────────────────
         steam_frame = ctk.CTkFrame(self)
-        steam_frame.grid(row=1, column=0, sticky="ew", **padding)
+        steam_frame.grid(row=2, column=0, sticky="ew", **padding)
         steam_frame.grid_columnconfigure(0, weight=1)
 
         steam_header = ctk.CTkFrame(steam_frame, fg_color="transparent")
@@ -117,7 +156,7 @@ class App(ctk.CTk):
 
         # ── OUTPUT SECTION ────────────────────────────────────────────
         output_frame = ctk.CTkFrame(self)
-        output_frame.grid(row=2, column=0, sticky="ew", **padding)
+        output_frame.grid(row=3, column=0, sticky="ew", **padding)
         output_frame.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(output_frame, text="Output", font=ctk.CTkFont(size=14, weight="bold")).grid(
@@ -147,11 +186,11 @@ class App(ctk.CTk):
             font=ctk.CTkFont(size=15, weight="bold"),
             command=self._run_export,
         )
-        self.export_btn.grid(row=3, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.export_btn.grid(row=4, column=0, padx=20, pady=(0, 10), sticky="ew")
 
         # ── STATUS AREA ───────────────────────────────────────────────
         self.status_box = ctk.CTkTextbox(self, height=100, state="disabled")
-        self.status_box.grid(row=4, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.status_box.grid(row=5, column=0, padx=20, pady=(0, 10), sticky="ew")
 
         # Configure text colors for status messages
         self.status_box._textbox.tag_config("error", foreground="red")
@@ -164,6 +203,7 @@ class App(ctk.CTk):
 
         # Apply initial toggle states
         self._toggle_gog_section()
+        self._toggle_epic_section()
         self._toggle_steam_section()
 
     # ── TOGGLE SECTION STATES ─────────────────────────────────────────
@@ -173,6 +213,13 @@ class App(ctk.CTk):
         state = "normal" if self.gog_enabled_var.get() else "disabled"
         self.gog_path_entry.configure(state="readonly" if self.gog_enabled_var.get() else "disabled")
         self.gog_browse_btn.configure(state=state)
+
+    def _toggle_epic_section(self):
+        """Gray out Epic section widgets when checkbox is unchecked."""
+        state = "normal" if self.epic_enabled_var.get() else "disabled"
+        self.epic_path_entry.configure(state="readonly" if self.epic_enabled_var.get() else "disabled")
+        self.epic_browse_btn.configure(state=state)
+
 
     def _toggle_steam_section(self):
         """Gray out Steam section widgets when checkbox is unchecked."""
@@ -192,6 +239,11 @@ class App(ctk.CTk):
         )
         if path:
             self.gog_path_var.set(path)
+
+    def _browse_epic_path(self):
+        path = filedialog.askdirectory(title="Select Legendary config folder")
+        if path:
+            self.epic_path_var.set(path)
 
     def _browse_output_dir(self):
         path = filedialog.askdirectory(title="Select output folder")
@@ -226,8 +278,10 @@ class App(ctk.CTk):
         """Save config before closing the window."""
         config.save({
             "gog_enabled": self.gog_enabled_var.get(),
+            "epic_enabled": self.epic_enabled_var.get(),
             "steam_enabled": self.steam_enabled_var.get(),
             "gog_auth_path": self.gog_path_var.get(),
+            "epic_legendary_path": self.epic_path_var.get(),
             "output_dir": self.output_dir_var.get(),
             "format": self.format_var.get(),
             "window_width": self.winfo_width(),
@@ -240,10 +294,11 @@ class App(ctk.CTk):
     def _run_export(self):
         """Validate selections before starting export thread."""
         gog_wanted = self.gog_enabled_var.get()
+        epic_wanted = self.epic_enabled_var.get()
         steam_wanted = self.steam_enabled_var.get()
 
         # Nothing selected at all
-        if not gog_wanted and not steam_wanted:
+        if not gog_wanted and not epic_wanted and not steam_wanted:
             self._clear_log()
             self._log("Nothing selected. Please check at least one platform.", "error")
             return
@@ -263,19 +318,19 @@ class App(ctk.CTk):
         threading.Thread(target=self._export_worker, daemon=True).start()
 
     def _export_worker(self):
-        gog_games = []
-        steam_games = []
+        libraries = {}
 
         # GOG
         if self.gog_enabled_var.get():
             self._log("Fetching GOG library...")
             try:
-                gog_games = export_gog(auth_path=Path(self.gog_path_var.get()))
-                self._log(f"GOG: {len(gog_games)} games found.", "success")
+                from core.gog import export_gog
+                games = export_gog(auth_path=Path(self.gog_path_var.get()))
+                libraries["gog"] = games
+                self._log(f"GOG: {len(games)} games found.", "success")
             except (FileNotFoundError, PermissionError) as e:
-                # GOG was explicitly requested but failed — halt and tell the user
                 self._log(f"GOG error: {e}", "error")
-                self._log("Export halted. Fix the GOG issue or uncheck GOG to export Steam only.", "error")
+                self._log("Export halted. Fix the GOG issue or uncheck GOG to continue.", "error")
                 self.export_btn.configure(state="normal", text="Export")
                 return
             except Exception as e:
@@ -283,26 +338,45 @@ class App(ctk.CTk):
                 self.export_btn.configure(state="normal", text="Export")
                 return
 
+        # Epic
+        if self.epic_enabled_var.get():
+            self._log("Fetching Epic library...")
+            try:
+                games = export_epic(legendary_path=Path(self.epic_path_var.get()))
+                libraries["epic"] = games
+                self._log(f"Epic: {len(games)} games found.", "success")
+            except (FileNotFoundError, PermissionError) as e:
+                self._log(f"Epic error: {e}", "error")
+                self._log("Export halted. Fix the Epic issue or uncheck Epic to continue.", "error")
+                self.export_btn.configure(state="normal", text="Export")
+                return
+            except Exception as e:
+                self._log(f"Epic unexpected error: {e}", "error")
+                self.export_btn.configure(state="normal", text="Export")
+                return
+
         # Steam
         if self.steam_enabled_var.get():
             raw_steam = self.steam_textbox.get("1.0", "end").strip()
-            steam_games = parse_steam_paste(raw_steam)
-            self._log(f"Steam: {len(steam_games)} games found.", "success")
+            games = parse_steam_paste(raw_steam)
+            libraries["steam"] = games
+            self._log(f"Steam: {len(games)} games found.", "success")
 
-        # Write output
+        if not libraries:
+            self._log("Nothing to export.", "error")
+            self.export_btn.configure(state="normal", text="Export")
+            return
+
         try:
-            gog_path, steam_path = write_output(
-                gog_games=gog_games,
-                steam_games=steam_games,
+            written = write_output(
+                libraries=libraries,
                 output_dir=Path(self.output_dir_var.get()),
                 format=self.format_var.get(),
             )
-            if gog_path:
-                self._log(f"Saved: {gog_path}", "success")
-            if steam_path:
-                self._log(f"Saved: {steam_path}", "success")
+            for platform, path in written.items():
+                self._log(f"Saved: {path}", "success")
             self._log("Done!", "success")
-            self.open_btn.grid(row=5, column=0, padx=20, pady=(0, 20), sticky="ew")
+            self.open_btn.grid(row=6, column=0, padx=20, pady=(0, 20), sticky="ew")
         except Exception as e:
             self._log(f"Output error: {e}", "error")
 

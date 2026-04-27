@@ -33,18 +33,18 @@ def get_default_output_dir() -> Path:
 
 
 def get_defaults() -> dict:
-    """
-    Default config values used on first launch when no config file exists.
-    """
     from core.gog import get_heroic_auth_path
+    from core.epic import get_legendary_config_path
     return {
         "gog_enabled": True,
         "steam_enabled": True,
+        "epic_enabled": True,
         "gog_auth_path": str(get_heroic_auth_path()),
+        "epic_legendary_path": str(get_legendary_config_path()),
         "output_dir": str(get_default_output_dir()),
         "format": "txt",
         "window_width": 700,
-        "window_height": 700,
+        "window_height": 900,
     }
 
 

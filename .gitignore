@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+*.txt
+*.json
+dist/
+build/
+*.spec
+backup/
+plan.md

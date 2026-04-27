@@ -1,6 +1,8 @@
 import json
+import ssl
 import sys
 import time
+import certifi
 import urllib.request
 from pathlib import Path
 
@@ -48,7 +50,6 @@ def get_gog_token(auth_path: Path) -> str:
 
     # auth.json is a dict keyed by a numeric GOG account ID, e.g.:
     # { "46899977096215655": { "access_token": "...", "refresh_token": "...", ... } }
-    # We grab the first (and typically only) account.
     account = list(data.values())[0]
 
     # loginTime is a Unix timestamp written by Heroic when it last fetched a fresh token.
@@ -76,7 +77,13 @@ def fetch_gog_games(token: str) -> list[str]:
     This is the same API endpoint Heroic and GOG Galaxy use internally
     to display your library. Results are paginated — each page returns
     up to 100 games, so we loop until all pages are collected.
+
+    We use certifi's certificate bundle for SSL verification instead of
+    relying on the system certificate store. This ensures consistent
+    behaviour across Linux distros, Windows, and macOS regardless of
+    system certificate updates or misconfigurations.
     """
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
     headers = {
         "Authorization": f"Bearer {token}",
         "User-Agent": "Mozilla/5.0",
@@ -86,7 +93,7 @@ def fetch_gog_games(token: str) -> list[str]:
     while True:
         url = f"https://embed.gog.com/account/getFilteredProducts?mediaType=1&page={page}"
         req = urllib.request.Request(url, headers=headers)
-        data = json.loads(urllib.request.urlopen(req).read())
+        data = json.loads(urllib.request.urlopen(req, context=ssl_context).read())
 
         products = data.get("products", [])
         if not products:
